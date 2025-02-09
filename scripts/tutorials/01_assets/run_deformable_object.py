@@ -54,7 +54,12 @@ def design_scene():
 
     # Create separate groups called "Origin1", "Origin2", "Origin3"
     # Each group will have a robot in it
-    origins = [[0.25, 0.25, 0.0], [-0.25, 0.25, 0.0], [0.25, -0.25, 0.0], [-0.25, -0.25, 0.0]]
+    origins = [
+        [0.25, 0.25, 0.0],
+        [-0.25, 0.25, 0.0],
+        [0.25, -0.25, 0.0],
+        [-0.25, -0.25, 0.0],
+    ]
     for i, origin in enumerate(origins):
         prim_utils.create_prim(f"/World/Origin{i}", "Xform", translation=origin)
 
@@ -77,7 +82,11 @@ def design_scene():
     return scene_entities, origins
 
 
-def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, DeformableObject], origins: torch.Tensor):
+def run_simulator(
+    sim: sim_utils.SimulationContext,
+    entities: dict[str, DeformableObject],
+    origins: torch.Tensor,
+):
     """Runs the simulation loop."""
     # Extract scene entities
     # note: we only do this here for readability. In general, it is better to access the entities directly from
@@ -104,6 +113,7 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Deformab
             # apply random pose to the object
             pos_w = torch.rand(cube_object.num_instances, 3, device=sim.device) * 0.1 + origins
             quat_w = math_utils.random_orientation(cube_object.num_instances, device=sim.device)
+            # shape is (N, max_sim_vertices_per_body, 3)
             nodal_state[..., :3] = cube_object.transform_nodal_pos(nodal_state[..., :3], pos_w, quat_w)
 
             # write nodal state to simulation
@@ -122,10 +132,13 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Deformab
 
         # update the kinematic target for cubes at index 0 and 3
         # we slightly move the cube in the z-direction by picking the vertex at index 0
+        # shape is (N, max_sim_vertices_per_body, 4:[(x, y, z, is_not_kinematic)])
         nodal_kinematic_target[[0, 3], 0, 2] += 0.001
+        nodal_kinematic_target[[0, 3], 4, 0] += 0.001
         # set vertex at index 0 to be kinematically constrained
         # 0: constrained, 1: free
         nodal_kinematic_target[[0, 3], 0, 3] = 0.0
+        nodal_kinematic_target[[0, 3], 4, 3] = 0.0
         # write kinematic target to simulation
         cube_object.write_nodal_kinematic_target_to_sim(nodal_kinematic_target)
 
