@@ -7,7 +7,7 @@
 This script demonstrates how to use the operational space controller (OSC) with the simulator.
 
 The OSC controller can be configured in different modes. It uses the dynamical quantities such as Jacobians and
-mass matricescomputed by PhysX.
+mass matrices computed by PhysX.
 
 .. code-block:: bash
 
@@ -132,8 +132,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         gravity_compensation=False,
         motion_damping_ratio_task=1.0,
         contact_wrench_stiffness_task=[0.0, 0.0, 0.1, 0.0, 0.0, 0.0],
-        motion_control_axes_task=[1, 1, 0, 1, 1, 1],
-        contact_wrench_control_axes_task=[0, 0, 1, 0, 0, 0],
+        motion_control_axes_task=[1, 1, 0, 1, 1, 1],  # Selection matrix diagonal
+        contact_wrench_control_axes_task=[0, 0, 1, 0, 0, 0],  # Selection matrix diagonal
         nullspace_control="position",
     )
     osc = OperationalSpaceController(osc_cfg, num_envs=scene.num_envs, device=sim.device)

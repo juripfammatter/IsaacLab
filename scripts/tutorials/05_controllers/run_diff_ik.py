@@ -12,7 +12,7 @@ PhysX. This helps perform parallelized computation of the inverse kinematics.
 .. code-block:: bash
 
     # Usage
-    ./isaaclab.sh -p scripts/tutorials/05_controllers/ik_control.py
+    ./isaaclab.sh -p scripts/tutorials/05_controllers/run_diff_ik.py
 
 """
 
@@ -105,7 +105,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     ee_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_current"))
     goal_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_goal"))
 
-    # Define goals for the arm
+    # Define goals for the arm (xyz, quat)
     ee_goals = [
         [0.5, 0.5, 0.7, 0.707, 0, 0.707, 0],
         [0.5, -0.4, 0.6, 0.707, 0.707, 0.0, 0.0],
