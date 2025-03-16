@@ -186,9 +186,11 @@ class QTable:
         "slider_to_cart": {"joint_pos_rel": (-1.0, 1.0), "joint_vel_rel": (-0.5, 0.5)},
         "cart_to_pole": {"joint_pos_rel": (-math.pi, math.pi), "joint_vel_rel": (-math.pi, math.pi)},
     }
+    observation_keys = ["slider_to_cart", "cart_to_pole"]
+    observation_type_keys = ["joint_pos_rel", "joint_vel_rel"]
 
     def __init__(
-        self, env: ManagerBasedRLEnv, n_obs: int = 100, n_actions: int = 3, alpha: float = 0.1, gamma: float = 0.9
+        self, env: ManagerBasedRLEnv, n_obs: int = 101, n_actions: int = 3, alpha: float = 0.1, gamma: float = 0.9
     ):
 
         self.gamma = gamma
@@ -198,12 +200,12 @@ class QTable:
         self.n_actions = n_actions
         self.action_space = env.action_manager.action_term_dim[0]
         self.observation_space = env.observation_manager.group_obs_dim.get("policy")[0]
-        self.q_table = torch.zeros((self.observation_space, self.n_obs, self.action_space, self.n_actions))
+        self.q_table = torch.zeros((self.n_obs,) * self.observation_space + (self.n_actions,) * self.action_space)
 
         print("Initialized Q-table with shape:", self.q_table.shape)
         print(
             f"Q-table range:\n action: {self._index_to_action(0)} - {self._index_to_action(self.n_actions - 1)}\n "
-            f"observation: {self._index_to_observation(0)} - {self._index_to_observation(self.n_obs - 1)}"
+            f"observation: {self._index_to_observation(0, 'slider_to_cart', 'joint_pos_rel')} - {self._index_to_observation(self.n_obs - 1, 'slider_to_cart', 'joint_pos_rel')}"
         )
 
         self._test_index_conversion()
@@ -212,41 +214,72 @@ class QTable:
         # sanity check
         assert self._action_to_index(self._index_to_action(0)) == 0
         assert self._action_to_index(self._index_to_action(self.n_actions - 1)) == self.n_actions - 1
-        assert self._observation_to_index(self._index_to_observation(0)) == 0
-        assert self._observation_to_index(self._index_to_observation(self.n_obs - 1)) == self.n_obs - 1
+        assert (
+            self._observation_to_index(
+                self._index_to_observation(0, "slider_to_cart", "joint_pos_rel"), "slider_to_cart", "joint_pos_rel"
+            )
+            == 0
+        )
+        assert (
+            self._observation_to_index(
+                self._index_to_observation(self.n_obs - 1, "slider_to_cart", "joint_pos_rel"),
+                "slider_to_cart",
+                "joint_pos_rel",
+            )
+            == self.n_obs - 1
+        )
+        assert (
+            torch.norm(
+                self._all_observations_to_index(self._all_index_to_observations(torch.tensor([0.0, 0.0, 0.0, 0.0])))
+                - torch.tensor([0.0, 0.0, 0.0, 0.0])
+            )
+            < 1e-6
+        )
 
-    def _action_to_index(self, action: torch.Tensor) -> int:
+    def _action_to_index(self, action: float) -> int:
         action_range = self.action_range["joint_efforts"][1] - self.action_range["joint_efforts"][0]
         action_index = int((action - self.action_range["joint_efforts"][0]) / action_range * (self.n_actions - 1))
-        return action_index
+        return action_index % self.n_actions
 
-    def _index_to_action(self, index: int) -> torch.Tensor:
+    def _index_to_action(self, index: int) -> float:
         action_range = self.action_range["joint_efforts"][1] - self.action_range["joint_efforts"][0]
         action = index * action_range / (self.n_actions - 1) + self.action_range["joint_efforts"][0]
-        return torch.tensor(action)
+        return action
 
-    def _observation_to_index(self, observation: torch.Tensor) -> int:
-        obs_range = (
-            self.observation_range["slider_to_cart"]["joint_pos_rel"][1]
-            - self.observation_range["slider_to_cart"]["joint_pos_rel"][0]
-        )
-        obs_index = int(
-            (observation - self.observation_range["slider_to_cart"]["joint_pos_rel"][0]) / obs_range * (self.n_obs - 1)
-        )
-        return obs_index
+    def _observation_to_index(self, observation: float, joint: str, obs_type: str) -> int:
+        obs_range = self.observation_range[joint][obs_type][1] - self.observation_range[joint][obs_type][0]
+        obs_index = int((observation - self.observation_range[joint][obs_type][0]) / obs_range * (self.n_obs - 1))
+        return obs_index % self.n_obs
 
-    def _index_to_observation(self, index: int) -> torch.Tensor:
-        obs_range = (
-            self.observation_range["slider_to_cart"]["joint_pos_rel"][1]
-            - self.observation_range["slider_to_cart"]["joint_pos_rel"][0]
-        )
-        observation = (
-            index * obs_range / (self.n_obs - 1) + self.observation_range["slider_to_cart"]["joint_pos_rel"][0]
-        )
-        return torch.tensor(observation)
+    def _all_observations_to_index(self, observations: torch.Tensor) -> torch.Tensor:
+        t = [
+            self._observation_to_index(obs, self.observation_keys[i // 2], self.observation_type_keys[i % 2])
+            for i, obs in enumerate(observations[0])
+        ]
+        return torch.tensor(t)
+
+    def _all_index_to_observations(self, indices: torch.Tensor) -> torch.Tensor:
+        t = [
+            self._index_to_observation(ind, self.observation_keys[i // 2], self.observation_type_keys[i % 2])
+            for i, ind in enumerate(indices)
+        ]
+        return torch.tensor([t])
+
+    def _index_to_observation(self, index: int, joint: str, obs_type: str) -> float:
+        obs_range = self.observation_range[joint][obs_type][1] - self.observation_range[joint][obs_type][0]
+        observation = index * obs_range / (self.n_obs - 1) + self.observation_range[joint][obs_type][0]
+        return observation
 
     def update(self, obs: torch.Tensor, act: torch.Tensor, rewards: torch.Tensor):
-        raise NotImplementedError
+
+        obs_indices = tuple((self._all_observations_to_index(obs)).tolist())
+        action_indices = self._action_to_index(act)
+        current_indices = obs_indices + (action_indices,)
+        # table_index_next = pass
+        # TODO: need next state indices
+        self.q_table[current_indices] += self.alpha * (
+            rewards.item() + self.gamma * torch.max(self.q_table[obs_indices]).item() - self.q_table[current_indices]
+        )
 
 
 class QAgent:
@@ -292,13 +325,13 @@ def main():
 
             # step the environment
             obs, rewards, terminated, truncated, info = env.step(action)
-            # q_table.update(obs, action, rewards)
+            q_table.update(obs["policy"], action, rewards)
             if count % 100 == 0:
                 print(f"Random joint velocity: {action.item()}")
-                # print current orientation of pole
-                print("Shape of observation:", {obs["policy"].shape})
-                print("[Env 0]: Pole joint: ", obs["policy"][0][1].item())
-                print(f"[Env 0]: Reward: {rewards[0]}")
+                print(f"Observation: {obs['policy']}")
+                print(f"indices: {q_table._all_observations_to_index(obs['policy'])}")
+                # print("Pole joint: ", obs["policy"][0][1].item())
+                print(f"Reward: {rewards.item()}")
                 # update counter
             count += 1
 
