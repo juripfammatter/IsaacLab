@@ -230,7 +230,7 @@ class QTable:
         )
         assert (
             torch.norm(
-                self._all_observations_to_index(self._all_index_to_observations(torch.tensor([0.0, 0.0, 0.0, 0.0])))
+                self.all_observations_to_index(self.all_index_to_observations(torch.tensor([0.0, 0.0, 0.0, 0.0])))
                 - torch.tensor([0.0, 0.0, 0.0, 0.0])
             )
             < 1e-6
@@ -251,14 +251,14 @@ class QTable:
         obs_index = int((observation - self.observation_range[joint][obs_type][0]) / obs_range * (self.n_obs - 1))
         return obs_index % self.n_obs
 
-    def _all_observations_to_index(self, observations: torch.Tensor) -> torch.Tensor:
+    def all_observations_to_index(self, observations: torch.Tensor) -> torch.Tensor:
         t = [
             self._observation_to_index(obs, self.observation_keys[i // 2], self.observation_type_keys[i % 2])
             for i, obs in enumerate(observations[0])
         ]
         return torch.tensor(t)
 
-    def _all_index_to_observations(self, indices: torch.Tensor) -> torch.Tensor:
+    def all_index_to_observations(self, indices: torch.Tensor) -> torch.Tensor:
         t = [
             self._index_to_observation(ind, self.observation_keys[i // 2], self.observation_type_keys[i % 2])
             for i, ind in enumerate(indices)
@@ -270,15 +270,17 @@ class QTable:
         observation = index * obs_range / (self.n_obs - 1) + self.observation_range[joint][obs_type][0]
         return observation
 
-    def update(self, obs: torch.Tensor, act: torch.Tensor, rewards: torch.Tensor):
+    def update(self, obs: torch.Tensor, next_obs: torch.Tensor, act: torch.Tensor, rewards: torch.Tensor):
 
-        obs_indices = tuple((self._all_observations_to_index(obs)).tolist())
+        obs_indices = tuple((self.all_observations_to_index(obs)).tolist())
+        next_obs_indices = tuple((self.all_observations_to_index(next_obs)).tolist())
         action_indices = self._action_to_index(act)
         current_indices = obs_indices + (action_indices,)
-        # table_index_next = pass
-        # TODO: need next state indices
+
         self.q_table[current_indices] += self.alpha * (
-            rewards.item() + self.gamma * torch.max(self.q_table[obs_indices]).item() - self.q_table[current_indices]
+            rewards.item()
+            + self.gamma * torch.max(self.q_table[next_obs_indices]).item()
+            - self.q_table[current_indices]
         )
 
 
@@ -289,8 +291,17 @@ class QAgent:
         self.epsilon = epsilon
 
     def get_action(self, obs: torch.Tensor) -> torch.Tensor:
+        obs_indices = tuple((self.q_table.all_observations_to_index(obs)).tolist())
+
         # epsilon-greedy policy
-        raise NotImplementedError
+
+        if torch.rand(1) < self.epsilon:
+            action_idx = torch.randint(0, self.q_table.n_actions, (1,))
+        else:
+            action_idx = torch.argmax(self.q_table.q_table[obs_indices])
+
+        action = torch.tensor([[self.q_table._index_to_action(action_idx.item())]])
+        return action
 
 
 def main():
@@ -302,15 +313,23 @@ def main():
     env = ManagerBasedRLEnv(cfg=env_cfg)
 
     # setup Q-table
-    n_obs = 100
-    n_actions = 3
+    n_obs = 101
+    n_actions = 11
 
     q_table = QTable(env, n_obs, n_actions)
-    q_agent = QAgent(env, q_table)
+    q_agent = QAgent(env, q_table, epsilon=0.3)
 
     # simulate physics
     count = 0
-    obs, _ = env.reset()
+    last_obs, _ = env.reset()
+
+    # initial action, observation
+    last_action = torch.randn_like(env.action_manager.action)
+    obs, rewards, terminated, truncated, info = env.step(last_action)
+    last_obs = obs["policy"]
+
+    cummulative_reward = 0
+    # run the simulation
     while simulation_app.is_running():
         with torch.inference_mode():
             # reset
@@ -320,20 +339,27 @@ def main():
                 print("-" * 80)
                 print("[INFO]: Resetting environment...")
             # sample random actions
-            action = torch.randn_like(env.action_manager.action)
-            # action = q_agent.get_action(obs)
+            # action = torch.randn_like(env.action_manager.action)
+            action = q_agent.get_action(last_obs)
 
             # step the environment
             obs, rewards, terminated, truncated, info = env.step(action)
-            q_table.update(obs["policy"], action, rewards)
-            if count % 100 == 0:
+            q_table.update(last_obs, obs["policy"], last_action, rewards)
+
+            cummulative_reward += rewards.item()
+            if count % 300 == 0:
                 print(f"Random joint velocity: {action.item()}")
                 print(f"Observation: {obs['policy']}")
-                print(f"indices: {q_table._all_observations_to_index(obs['policy'])}")
-                # print("Pole joint: ", obs["policy"][0][1].item())
-                print(f"Reward: {rewards.item()}")
-                # update counter
+                # print(f"indices: {q_table.all_observations_to_index(obs['policy'])}")
+                print(f"Action: {action.item()}")
+                print(f"Cummulative Rewards: {cummulative_reward}")
+
+                cummulative_reward = 0
+
+            # update counter
             count += 1
+            last_obs = obs["policy"]
+            last_action = action
 
     # close the environment
     env.close()
