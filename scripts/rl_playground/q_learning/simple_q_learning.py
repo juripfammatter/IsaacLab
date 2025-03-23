@@ -125,7 +125,7 @@ class RewardsCfg:
     # (3) Primary task: keep pole upright
     pole_pos = RewTerm(
         func=mdp.joint_deviation_l1,
-        weight=-1.0,
+        weight=-2.0,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"])},
     )
     # (4) Shaping tasks: lower cart velocity
@@ -193,9 +193,9 @@ class CartpoleEnvCfg(ManagerBasedRLEnvCfg):
 class QTable:
     """Q-table for Q-learning algorithm."""
 
-    action_range = {"joint_efforts": (-1.0, 1.0)}
+    action_range = {"joint_efforts": (-3.0, 3.0)}
     observation_range = {
-        "slider_to_cart": {"joint_pos_rel": (-3.0, 3.0), "joint_vel_rel": (-0.5, 0.5)},
+        "slider_to_cart": {"joint_pos_rel": (-1.0, 1.0), "joint_vel_rel": (-0.5, 0.5)},
         "cart_to_pole": {"joint_pos_rel": (-math.pi / 4, math.pi / 4), "joint_vel_rel": (-0.5, 0.5)},
     }
     observation_keys = ["slider_to_cart", "cart_to_pole"]
@@ -216,8 +216,11 @@ class QTable:
 
         print("Initialized Q-table with shape:", self.q_table.shape)
         print(
-            f"Q-table range:\n action: {self._index_to_action(0)} - {self._index_to_action(self.n_actions - 1)}\n "
-            f"observation: {self._index_to_observation(0, 'slider_to_cart', 'joint_pos_rel')} - {self._index_to_observation(self.n_obs - 1, 'slider_to_cart', 'joint_pos_rel')}"
+            f"Q-table range:\naction: {self._index_to_action(0)} - {self._index_to_action(self.n_actions - 1)}"
+            f"\nobservation: {self._index_to_observation(0, 'slider_to_cart', 'joint_pos_rel')} - {self._index_to_observation(self.n_obs - 1, 'slider_to_cart', 'joint_pos_rel')}",
+            f"\nobservation: {self._index_to_observation(0, 'slider_to_cart', 'joint_vel_rel')} - {self._index_to_observation(self.n_obs - 1, 'slider_to_cart', 'joint_vel_rel')}",
+            f"\nobservation: {self._index_to_observation(0, 'cart_to_pole', 'joint_pos_rel')} - {self._index_to_observation(self.n_obs - 1, 'cart_to_pole', 'joint_pos_rel')}",
+            f"\nobservation: {self._index_to_observation(0, 'cart_to_pole', 'joint_vel_rel')} - {self._index_to_observation(self.n_obs - 1, 'cart_to_pole', 'joint_vel_rel')}",
         )
 
         self._test_index_conversion()
@@ -304,6 +307,8 @@ class QTable:
             - self.q_table[current_indices]
         )
 
+        # print(f"Q-table {current_indices} updated to {self.q_table[current_indices]}")
+
     def save(self, path: str):
         torch.save(self.q_table, path)
 
@@ -361,8 +366,8 @@ def main():
     n_episodes = 500
 
     # setup Q-table
-    n_obs = 51
-    n_actions = 51
+    n_obs = 11
+    n_actions = 11
 
     q_table = QTable(env, n_obs, n_actions)
     q_agent = QAgent(env, q_table, epsilon=0.3)
@@ -374,6 +379,7 @@ def main():
     last_action = torch.randn_like(env.action_manager.action)
     obs, rewards, terminated, truncated, info = env.step(last_action)
     last_obs = obs["policy"]
+    last_rewards = rewards
 
     cummulative_reward = 0
     rewards_list = []
@@ -386,18 +392,17 @@ def main():
     for ep in range(n_episodes):
         with torch.inference_mode():
             while simulation_app.is_running() and not terminated:
-                # sample random actions
-                # action = torch.randn_like(env.action_manager.action)
                 action = q_agent.get_action(last_obs, epsilon)
 
                 # step the environment
                 obs, rewards, terminated, truncated, info = env.step(action)
-                q_table.update(last_obs, obs["policy"], last_action, rewards, alpha)
+                q_table.update(last_obs, obs["policy"], last_action, last_rewards, alpha)
 
                 cummulative_reward += rewards.item()
 
                 last_obs = obs["policy"]
                 last_action = action
+                last_rewards = rewards
 
             rewards_list.append(cummulative_reward)
             cummulative_reward = 0
