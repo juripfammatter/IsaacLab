@@ -7,6 +7,9 @@
 This script demonstrates how to create a simple environment with a cartpole. It combines the concepts of
 scene, action, observation and event managers to create an environment.
 """
+import os
+
+import matplotlib.pyplot as plt
 
 """Launch Isaac Sim Simulator first."""
 
@@ -32,6 +35,7 @@ simulation_app = app_launcher.app
 
 import math
 import torch
+from tqdm import tqdm
 
 import isaaclab.envs.mdp as mdp
 from isaaclab.envs import ManagerBasedEnv, ManagerBasedEnvCfg, ManagerBasedRLEnv, ManagerBasedRLEnvCfg
@@ -83,7 +87,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=["pole"]),
-            "mass_distribution_params": (0.1, 0.5),
+            "mass_distribution_params": (0.1, 0.15),
             "operation": "add",
         },
     )
@@ -104,7 +108,7 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"]),
-            "position_range": (-0.125 * math.pi, 0.125 * math.pi),
+            "position_range": (-0.05 * math.pi, 0.05 * math.pi),
             "velocity_range": (-0.01 * math.pi, 0.01 * math.pi),
         },
     )
@@ -149,6 +153,14 @@ class TerminationsCfg:
         func=mdp.joint_pos_out_of_manual_limit,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=["slider_to_cart"]), "bounds": (-3.0, 3.0)},
     )
+    # (3) Pole out of bounds
+    pole_out_of_bounds = DoneTerm(
+        func=mdp.joint_pos_out_of_manual_limit,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"]),
+            "bounds": (-math.pi / 4, math.pi / 4),
+        },
+    )
 
 
 @configclass
@@ -183,14 +195,14 @@ class QTable:
 
     action_range = {"joint_efforts": (-1.0, 1.0)}
     observation_range = {
-        "slider_to_cart": {"joint_pos_rel": (-1.0, 1.0), "joint_vel_rel": (-0.5, 0.5)},
-        "cart_to_pole": {"joint_pos_rel": (-math.pi, math.pi), "joint_vel_rel": (-math.pi, math.pi)},
+        "slider_to_cart": {"joint_pos_rel": (-3.0, 3.0), "joint_vel_rel": (-0.5, 0.5)},
+        "cart_to_pole": {"joint_pos_rel": (-math.pi / 4, math.pi / 4), "joint_vel_rel": (-0.5, 0.5)},
     }
     observation_keys = ["slider_to_cart", "cart_to_pole"]
     observation_type_keys = ["joint_pos_rel", "joint_vel_rel"]
 
     def __init__(
-        self, env: ManagerBasedRLEnv, n_obs: int = 101, n_actions: int = 3, alpha: float = 0.1, gamma: float = 0.9
+        self, env: ManagerBasedRLEnv, n_obs: int = 101, n_actions: int = 3, alpha: float = 0.4, gamma: float = 0.95
     ):
 
         self.gamma = gamma
@@ -270,7 +282,16 @@ class QTable:
         observation = index * obs_range / (self.n_obs - 1) + self.observation_range[joint][obs_type][0]
         return observation
 
-    def update(self, obs: torch.Tensor, next_obs: torch.Tensor, act: torch.Tensor, rewards: torch.Tensor):
+    def update(
+        self,
+        obs: torch.Tensor,
+        next_obs: torch.Tensor,
+        act: torch.Tensor,
+        rewards: torch.Tensor,
+        alpha: float | None = None,
+    ):
+        if alpha is not None:
+            self.alpha = alpha
 
         obs_indices = tuple((self.all_observations_to_index(obs)).tolist())
         next_obs_indices = tuple((self.all_observations_to_index(next_obs)).tolist())
@@ -283,6 +304,9 @@ class QTable:
             - self.q_table[current_indices]
         )
 
+    def save(self, path: str):
+        torch.save(self.q_table, path)
+
 
 class QAgent:
 
@@ -290,11 +314,13 @@ class QAgent:
         self.q_table = q_table
         self.epsilon = epsilon
 
-    def get_action(self, obs: torch.Tensor) -> torch.Tensor:
+    def get_action(self, obs: torch.Tensor, epsilon: float | None = None) -> torch.Tensor:
+        if epsilon is not None:
+            self.epsilon = epsilon
+
         obs_indices = tuple((self.q_table.all_observations_to_index(obs)).tolist())
 
         # epsilon-greedy policy
-
         if torch.rand(1) < self.epsilon:
             action_idx = torch.randint(0, self.q_table.n_actions, (1,))
         else:
@@ -302,6 +328,18 @@ class QAgent:
 
         action = torch.tensor([[self.q_table._index_to_action(action_idx.item())]])
         return action
+
+
+class CustomScheduler:
+    def __init__(self, initial_lr: float, gamma: float = 0.99):
+        self.value = torch.nn.Parameter(torch.tensor([0.0]))
+        self.optimizer = torch.optim.SGD([self.value], lr=initial_lr)
+        self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=gamma)
+        self.optimizer.step()
+
+    def step(self) -> float:
+        self.scheduler.step()
+        return self.scheduler.get_last_lr()[0]
 
 
 def main():
@@ -312,15 +350,24 @@ def main():
     # setup base environment
     env = ManagerBasedRLEnv(cfg=env_cfg)
 
+    # alpha scheduler
+    alpha_scheduler = CustomScheduler(0.1, gamma=0.995)
+    alpha = alpha_scheduler.step()
+
+    # exploration scheduler (GLIE policy)
+    epsilon_scheduler = CustomScheduler(0.5, gamma=0.995)
+    epsilon = epsilon_scheduler.step()
+
+    n_episodes = 500
+
     # setup Q-table
-    n_obs = 101
-    n_actions = 11
+    n_obs = 51
+    n_actions = 51
 
     q_table = QTable(env, n_obs, n_actions)
     q_agent = QAgent(env, q_table, epsilon=0.3)
 
     # simulate physics
-    count = 0
     last_obs, _ = env.reset()
 
     # initial action, observation
@@ -329,40 +376,68 @@ def main():
     last_obs = obs["policy"]
 
     cummulative_reward = 0
+    rewards_list = []
+    alphas = []
+    epsilons = []
+    terminated = False
+
     # run the simulation
-    while simulation_app.is_running():
+    pbar = tqdm(total=n_episodes)
+    for ep in range(n_episodes):
         with torch.inference_mode():
-            # reset
-            if count % 300 == 0:
-                count = 0
-                obs, _ = env.reset()
-                print("-" * 80)
-                print("[INFO]: Resetting environment...")
-            # sample random actions
-            # action = torch.randn_like(env.action_manager.action)
-            action = q_agent.get_action(last_obs)
+            while simulation_app.is_running() and not terminated:
+                # sample random actions
+                # action = torch.randn_like(env.action_manager.action)
+                action = q_agent.get_action(last_obs, epsilon)
 
-            # step the environment
-            obs, rewards, terminated, truncated, info = env.step(action)
-            q_table.update(last_obs, obs["policy"], last_action, rewards)
+                # step the environment
+                obs, rewards, terminated, truncated, info = env.step(action)
+                q_table.update(last_obs, obs["policy"], last_action, rewards, alpha)
 
-            cummulative_reward += rewards.item()
-            if count % 300 == 0:
-                print(f"Random joint velocity: {action.item()}")
-                print(f"Observation: {obs['policy']}")
-                # print(f"indices: {q_table.all_observations_to_index(obs['policy'])}")
-                print(f"Action: {action.item()}")
-                print(f"Cummulative Rewards: {cummulative_reward}")
+                cummulative_reward += rewards.item()
 
-                cummulative_reward = 0
+                last_obs = obs["policy"]
+                last_action = action
 
-            # update counter
-            count += 1
-            last_obs = obs["policy"]
-            last_action = action
+            rewards_list.append(cummulative_reward)
+            cummulative_reward = 0
+
+            obs, _ = env.reset()
+            terminated = False
+
+            # alpha = alpha_scheduler.step()
+            alphas.append(alpha)
+            epsilon = epsilon_scheduler.step()
+            epsilons.append(epsilon)
+
+            pbar.update(1)
+            pbar.set_description(
+                ", ".join(
+                    [
+                        f"Episode: {ep}",
+                        f"Rewards: {rewards_list[-1]:.4f}",
+                        f"Alpha: {alpha:.4f}",
+                        f"Epsilon: {epsilon:.4f}",
+                    ]
+                )
+            )
 
     # close the environment
     env.close()
+    q_table.save("scripts/rl_playground/q_learning/out/q_table.pt")
+
+    fig, axs = plt.subplots(1, 3, figsize=(10, 5))
+
+    axs[0].scatter(range(len(rewards_list)), rewards_list, s=4, alpha=0.5)
+    axs[0].set(title="Rewards")
+    axs[1].plot(alphas)
+    axs[1].set(title="$\\alpha$")
+    axs[2].plot(epsilons)
+    axs[2].set(title="$\\epsilon$")
+
+    plt.tight_layout()
+
+    fig.savefig("scripts/rl_playground/q_learning/out/q_learning_rewards.png", dpi=300),
 
 
 if __name__ == "__main__":
