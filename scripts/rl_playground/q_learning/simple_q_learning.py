@@ -356,14 +356,14 @@ def main():
     env = ManagerBasedRLEnv(cfg=env_cfg)
 
     # alpha scheduler
-    alpha_scheduler = CustomScheduler(0.1, gamma=0.995)
+    alpha_scheduler = CustomScheduler(0.3, gamma=0.995)
     alpha = alpha_scheduler.step()
 
     # exploration scheduler (GLIE policy)
-    epsilon_scheduler = CustomScheduler(0.5, gamma=0.995)
+    epsilon_scheduler = CustomScheduler(0.5, gamma=0.999)
     epsilon = epsilon_scheduler.step()
 
-    n_episodes = 500
+    n_episodes = 1000
 
     # setup Q-table
     n_obs = 11
@@ -379,7 +379,6 @@ def main():
     last_action = torch.randn_like(env.action_manager.action)
     obs, rewards, terminated, truncated, info = env.step(last_action)
     last_obs = obs["policy"]
-    last_rewards = rewards
 
     cummulative_reward = 0
     rewards_list = []
@@ -396,13 +395,11 @@ def main():
 
                 # step the environment
                 obs, rewards, terminated, truncated, info = env.step(action)
-                q_table.update(last_obs, obs["policy"], last_action, last_rewards, alpha)
+                q_table.update(last_obs, obs["policy"], action, rewards, alpha)
 
                 cummulative_reward += rewards.item()
 
                 last_obs = obs["policy"]
-                last_action = action
-                last_rewards = rewards
 
             rewards_list.append(cummulative_reward)
             cummulative_reward = 0
