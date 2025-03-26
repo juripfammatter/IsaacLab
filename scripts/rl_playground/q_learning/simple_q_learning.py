@@ -121,11 +121,11 @@ class RewardsCfg:
     # (1) Constant running reward
     alive = RewTerm(func=mdp.is_alive, weight=1.0)
     # (2) Failure penalty
-    terminating = RewTerm(func=mdp.is_terminated, weight=-2.0)
+    terminating = RewTerm(func=mdp.is_terminated, weight=-20.0)
     # (3) Primary task: keep pole upright
     pole_pos = RewTerm(
         func=mdp.joint_deviation_l1,
-        weight=-2.0,
+        weight=-10.0,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=["cart_to_pole"])},
     )
     # (4) Shaping tasks: lower cart velocity
@@ -356,18 +356,18 @@ def main():
     env = ManagerBasedRLEnv(cfg=env_cfg)
 
     # alpha scheduler
-    alpha_scheduler = CustomScheduler(0.3, gamma=0.995)
+    alpha_scheduler = CustomScheduler(0.3, gamma=0.9995)
     alpha = alpha_scheduler.step()
 
     # exploration scheduler (GLIE policy)
-    epsilon_scheduler = CustomScheduler(0.5, gamma=0.999)
+    epsilon_scheduler = CustomScheduler(0.5, gamma=0.9995)
     epsilon = epsilon_scheduler.step()
 
-    n_episodes = 1000
+    n_episodes = 5_000
 
     # setup Q-table
-    n_obs = 11
-    n_actions = 11
+    n_obs = 21
+    n_actions = 51
 
     q_table = QTable(env, n_obs, n_actions)
     q_agent = QAgent(env, q_table, epsilon=0.3)
@@ -380,15 +380,16 @@ def main():
     obs, rewards, terminated, truncated, info = env.step(last_action)
     last_obs = obs["policy"]
 
-    cummulative_reward = 0
+    cumulative_reward, cumulative_eval_reward = 0, 0
     rewards_list = []
+    eval_rewards = []
     alphas = []
     epsilons = []
     terminated = False
 
     # run the simulation
     pbar = tqdm(total=n_episodes)
-    for ep in range(n_episodes):
+    for ep in range(n_episodes + 1):
         with torch.inference_mode():
             while simulation_app.is_running() and not terminated:
                 action = q_agent.get_action(last_obs, epsilon)
@@ -397,17 +398,37 @@ def main():
                 obs, rewards, terminated, truncated, info = env.step(action)
                 q_table.update(last_obs, obs["policy"], action, rewards, alpha)
 
-                cummulative_reward += rewards.item()
+                cumulative_reward += rewards.item()
 
                 last_obs = obs["policy"]
 
-            rewards_list.append(cummulative_reward)
-            cummulative_reward = 0
+            # evaluation
+            if ep % 50 == 0:
+                n_eval = 5
+                for _ in range(n_eval):
+                    last_obs, _ = env.reset()
+                    last_obs = last_obs["policy"]
+                    terminated = False
+
+                    while simulation_app.is_running() and not terminated:
+                        action = q_agent.get_action(last_obs, epsilon=0.0)
+
+                        # step the environment
+                        obs, rewards, terminated, truncated, info = env.step(action)
+                        # q_table.update(last_obs, obs["policy"], action, rewards, alpha)
+
+                        cumulative_eval_reward += rewards.item()
+
+                        last_obs = obs["policy"]
+                eval_rewards.append(cumulative_eval_reward / n_eval)
+
+            rewards_list.append(cumulative_reward)
+            cumulative_reward, cumulative_eval_reward = 0, 0
 
             obs, _ = env.reset()
             terminated = False
 
-            # alpha = alpha_scheduler.step()
+            alpha = alpha_scheduler.step()
             alphas.append(alpha)
             epsilon = epsilon_scheduler.step()
             epsilons.append(epsilon)
@@ -418,6 +439,7 @@ def main():
                     [
                         f"Episode: {ep}",
                         f"Rewards: {rewards_list[-1]:.4f}",
+                        f"Eval Rewards: {eval_rewards[-1]:.4f}",
                         f"Alpha: {alpha:.4f}",
                         f"Epsilon: {epsilon:.4f}",
                     ]
@@ -426,11 +448,12 @@ def main():
 
     # close the environment
     env.close()
-    q_table.save("scripts/rl_playground/q_learning/out/q_table.pt")
+    q_table.save("scripts/rl_playground/q_learning/out/q_table_5k.pt")
 
     fig, axs = plt.subplots(1, 3, figsize=(10, 5))
 
-    axs[0].scatter(range(len(rewards_list)), rewards_list, s=4, alpha=0.5)
+    axs[0].scatter(range(len(rewards_list)), rewards_list, s=4, alpha=0.5, label="Rewards")
+    axs[0].plot(range(0, len(rewards_list), 50), eval_rewards, "x--", color="magenta", alpha=0.5, label="Eval Rewards")
     axs[0].set(title="Rewards")
     axs[1].plot(alphas)
     axs[1].set(title="$\\alpha$")
