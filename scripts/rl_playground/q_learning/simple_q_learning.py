@@ -68,10 +68,10 @@ def main():
     alpha = alpha_scheduler.step()
 
     # exploration scheduler (GLIE policy)
-    epsilon_scheduler = CustomScheduler(0.5, gamma=0.9995)
+    epsilon_scheduler = CustomScheduler(0.2, gamma=0.9995)
     epsilon = epsilon_scheduler.step()
 
-    n_episodes = 500
+    n_episodes = 10_000
 
     # setup Q-table
     n_obs = 21
@@ -96,8 +96,8 @@ def main():
     terminated = False
 
     # find max velocity
-    max_cart_vel = 0.0
-    max_pole_vel = 0.0
+    # max_cart_vel = 0.0
+    # max_pole_vel = 0.0
 
     # run the simulation
     pbar = tqdm(total=n_episodes)
@@ -114,10 +114,10 @@ def main():
 
                 last_obs = obs["policy"]
 
-                if obs["policy"][0][1] > max_cart_vel:
-                    max_cart_vel = obs["policy"][0][1]
-                if obs["policy"][0][3] > max_pole_vel:
-                    max_pole_vel = obs["policy"][0][3]
+                # if obs["policy"][0][1] > max_cart_vel:
+                #     max_cart_vel = obs["policy"][0][1]
+                # if obs["policy"][0][3] > max_pole_vel:
+                #     max_pole_vel = obs["policy"][0][3]
 
             # evaluation
             if ep % 50 == 0:
@@ -145,7 +145,7 @@ def main():
             obs, _ = env.reset()
             terminated = False
 
-            alpha = alpha_scheduler.step()
+            # alpha = alpha_scheduler.step()
             alphas.append(alpha)
             epsilon = epsilon_scheduler.step()
             epsilons.append(epsilon)
@@ -165,7 +165,7 @@ def main():
 
     # close the environment
     env.close()
-    q_table.save("scripts/rl_playground/q_learning/out/q_table_5k.pt")
+    q_table.save("scripts/rl_playground/q_learning/out/q_table.pt")
 
     fig, axs = plt.subplots(1, 3, figsize=(10, 5))
 
@@ -181,7 +181,7 @@ def main():
 
     fig.savefig("scripts/rl_playground/q_learning/out/q_learning_rewards.png", dpi=300)
 
-    print(f"max cart vel: {max_cart_vel}, max pole vel: {max_pole_vel}")
+    # print(f"max cart vel: {max_cart_vel}, max pole vel: {max_pole_vel}")
 
 
 if __name__ == "__main__":

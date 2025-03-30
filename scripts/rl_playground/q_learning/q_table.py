@@ -8,7 +8,7 @@ from isaaclab.envs import ManagerBasedRLEnv
 class QTable:
     """Q-table for Q-learning algorithm."""
 
-    action_range = {"joint_efforts": (-3.0, 3.0)}
+    action_range = {"joint_efforts": (-12.0, 12.0)}
     observation_range = {
         "slider_to_cart": {"joint_pos_rel": (-3.0, 3.0), "joint_vel_rel": (-1.0, 1.0)},
         "cart_to_pole": {"joint_pos_rel": (-math.pi / 4, math.pi / 4), "joint_vel_rel": (-3.5, 3.5)},
@@ -17,7 +17,7 @@ class QTable:
     observation_type_keys = ["joint_pos_rel", "joint_vel_rel"]
 
     def __init__(
-        self, env: ManagerBasedRLEnv, n_obs: int = 101, n_actions: int = 3, alpha: float = 0.4, gamma: float = 0.95
+        self, env: ManagerBasedRLEnv, n_obs: int = 101, n_actions: int = 3, alpha: float = 0.1, gamma: float = 0.95
     ):
 
         self.gamma = gamma
@@ -127,6 +127,9 @@ class QTable:
 
     def save(self, path: str):
         torch.save(self.q_table, path)
+
+    def load(self, path: str):
+        self.q_table = torch.load(path)
 
 
 class QAgent:
