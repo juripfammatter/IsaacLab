@@ -50,7 +50,7 @@ hyperparameters = {
     "target_update": 10,
     "epsilon": 0.1,
     "n_episodes": 100,
-    "batch_size": 128,
+    "batch_size": 6,
     "memory_capacity": 10_000,
 }
 
@@ -79,11 +79,13 @@ def main():
     target_value_net = DQN(n_observations, n_action_steps).to(env.device)
     target_value_net.load_state_dict(action_value_net.state_dict())
 
-    agent = DQNAgent(action_value_net, target_value_net)
-
     # Optimizer
-    optimizer = optim.AdamW(action_value_net.parameters(), lr=hyperparameters["learning_rate"], amsgrad=True)
+    # optimizer = optim.AdamW(action_value_net.parameters(), lr=hyperparameters["learning_rate"], amsgrad=True)
     # TODO: add scheduler
+
+    agent = DQNAgent(
+        action_value_net, target_value_net, gamma=hyperparameters["gamma"], lr=hyperparameters["learning_rate"]
+    )
 
     # Replay memory
     memory = ReplayMemory(hyperparameters["memory_capacity"])
@@ -95,20 +97,20 @@ def main():
 
     # run the simulation
 
-    terminated = False
-
     for ep in range(hyperparameters["n_episodes"] + 1):
+        terminated = False
         with torch.inference_mode():
             state, _ = env.reset()
             state = state["policy"]
             while simulation_app.is_running() and not terminated:
                 # action = torch.randn_like(env.action_manager.action)
                 action = agent.get_action(state, epsilon)
-                # print(f"action: {agent.get_action(state, epsilon)}")
-                # action = agent.get_action(state, epsilon)
+                print(f"action: {agent.get_action(state, epsilon)}")
+                print(f"continuous action: {agent.index_to_action(action)}")
 
                 # step the environment
-                obs, rewards, terminated, truncated, info = env.step(action)
+                continuous_action = agent.index_to_action(action)
+                obs, rewards, terminated, truncated, info = env.step(continuous_action)
 
                 if terminated:
                     next_state = None
