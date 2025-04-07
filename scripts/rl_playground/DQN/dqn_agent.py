@@ -25,22 +25,35 @@ class DQN(nn.Module):
 
 class DQNAgent(object):
 
-    def __init__(self, action_value_net: DQN, target_value_net: DQN, gamma: float, lr: float) -> None:
-        self.action_value_net = action_value_net
-        self.target_value_net = target_value_net
-        self.device = action_value_net.layer1.weight.device
-        self.optimizer = optim.AdamW(self.action_value_net.parameters(), lr=lr, amsgrad=True)
+    def __init__(
+        self,
+        n_observations: int,
+        n_action_steps: int,
+        gamma: float,
+        lr: float,
+        device: str,
+    ) -> None:
+        self.device = device
+
+        self.action_value_net = DQN(n_observations, n_action_steps).to(self.device)
+        self.target_value_net = DQN(n_observations, n_action_steps).to(self.device)
+        self.target_value_net.load_state_dict(self.action_value_net.state_dict())
+
+        self.optimizer = optim.AdamW(self.action_value_net.parameters(), lr=lr, amsgrad=True)  # TODO: add scheduler
         self.gamma = gamma
 
     def get_action(self, state: Tensor, epsilon: float) -> Tensor:
         """epsilon greedy action selection"""
+        # TODO: make dimensions parametric
+
         if torch.rand(1).item() > epsilon:
             with torch.no_grad():
-                action_idx = self.action_value_net(state).argmax().item()
+                # return self.action_value_net(state).argmax().item()
+                return self.action_value_net(state).max(1).indices.view(1, 1)
         else:
-            action_idx = torch.randint(0, self.action_value_net.layer3.out_features, (1,)).item()
-
-        return torch.tensor([[action_idx]], dtype=torch.int64, device=self.device)
+            return torch.randint(
+                0, self.action_value_net.layer3.out_features, (1, 1), dtype=torch.long, device=self.device
+            )
 
     def update(self, transition_batch: list[Transition]):
         # This converts batch-array of Transitions to Transition of batch-arrays.
@@ -56,10 +69,6 @@ class DQNAgent(object):
         action_batch = torch.cat(batch.action)  # Bx1
         reward_batch = torch.cat(batch.reward)  # B
 
-        print(f"{state_batch = }")
-        print(f"{action_batch = }")
-        print(f"{reward_batch = }")
-
         # Compute Q(s_t, a_t) given the action a_t taken at state s_t
         state_action_values = self.action_value_net(state_batch).gather(1, action_batch)
 
@@ -69,31 +78,32 @@ class DQNAgent(object):
         # This is merged based on the mask, such that we'll have either the expected
         # state value or 0 in case the state was final.
         next_state_values = torch.zeros(len(transition_batch), device=self.device)
+
+        # compute the next state values from target net
         with torch.no_grad():
             next_state_values[non_final_mask] = self.target_value_net(non_final_next_states).max(1).values
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * self.gamma) + reward_batch
 
-        print(f"{state_action_values = }")
-        print(f"{next_state_values = }")
-        print(f"{expected_state_action_values.unsqueeze(1) = }")
-
-        # TODO: fix error with missing gradients. Maybe some dimensions don't check out
-        # state_action_values.requires_grad = True
-        # expected_state_action_values.requires_grad = True
-        #
-        # print(f"{state_action_values.requires_grad = }")
-        # print(f"{expected_state_action_values.requires_grad = }")
-
         # Compute Huber loss
         criterion = nn.SmoothL1Loss()
         loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
         # In-place gradient clipping
         torch.nn.utils.clip_grad_value_(self.action_value_net.parameters(), 100)
         self.optimizer.step()
+
+    def sync_target_net(self):
+        """Update target network"""
+        tau = 0.005
+        target_net_state_dict = self.target_value_net.state_dict()
+        policy_net_state_dict = self.action_value_net.state_dict()
+        for key in policy_net_state_dict:
+            target_net_state_dict[key] = policy_net_state_dict[key] * tau + target_net_state_dict[key] * (1 - tau)
+        self.target_value_net.load_state_dict(target_net_state_dict)
 
     def index_to_action(self, index: Tensor) -> Tensor:
         """Convert index to action"""
@@ -102,4 +112,3 @@ class DQNAgent(object):
             (index / (self.action_value_net.layer3.out_features - 1)) * (action_range[1] - action_range[0])
         ) + action_range[0]
         return action
-        # return torch.tensor([[action]], dtype=torch.float32, device=self.device)

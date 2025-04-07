@@ -50,7 +50,7 @@ hyperparameters = {
     "target_update": 10,
     "epsilon": 0.1,
     "n_episodes": 100,
-    "batch_size": 6,
+    "batch_size": 128,
     "memory_capacity": 10_000,
 }
 
@@ -66,25 +66,17 @@ def main():
     n_actions = env.action_manager.total_action_dim
     n_action_steps = 7
 
-    # print(f"{n_observations = }")
-    # print(f"{n_actions = }")
-
     # TODO
     # exploration scheduler (GLIE policy)
     epsilon_scheduler = CustomScheduler(hyperparameters["gamma"], gamma=0.9995)
     epsilon = epsilon_scheduler.step()
 
-    # setup Agent
-    action_value_net = DQN(n_observations, n_action_steps).to(env.device)
-    target_value_net = DQN(n_observations, n_action_steps).to(env.device)
-    target_value_net.load_state_dict(action_value_net.state_dict())
-
-    # Optimizer
-    # optimizer = optim.AdamW(action_value_net.parameters(), lr=hyperparameters["learning_rate"], amsgrad=True)
-    # TODO: add scheduler
-
     agent = DQNAgent(
-        action_value_net, target_value_net, gamma=hyperparameters["gamma"], lr=hyperparameters["learning_rate"]
+        n_observations,
+        n_action_steps,
+        gamma=hyperparameters["gamma"],
+        lr=hyperparameters["learning_rate"],
+        device=env.device,
     )
 
     # Replay memory
@@ -93,57 +85,58 @@ def main():
     # logging
     rewards_list = []
     cumulative_reward = 0.0
+
     pbar = tqdm(total=hyperparameters["n_episodes"])
 
     # run the simulation
 
     for ep in range(hyperparameters["n_episodes"] + 1):
         terminated = False
-        with torch.inference_mode():
-            state, _ = env.reset()
-            state = state["policy"]
-            while simulation_app.is_running() and not terminated:
-                # action = torch.randn_like(env.action_manager.action)
-                action = agent.get_action(state, epsilon)
-                print(f"action: {agent.get_action(state, epsilon)}")
-                print(f"continuous action: {agent.index_to_action(action)}")
+        state, _ = env.reset()
+        state = state["policy"]
+        while simulation_app.is_running() and not terminated:
+            # action = torch.randn_like(env.action_manager.action)
+            action = agent.get_action(state, epsilon)
+            # print(f"action: {agent.get_action(state, epsilon)}")
+            # print(f"continuous action: {agent.index_to_action(action)}")
 
-                # step the environment
-                continuous_action = agent.index_to_action(action)
-                obs, rewards, terminated, truncated, info = env.step(continuous_action)
+            # step the environment
+            continuous_action = agent.index_to_action(action)
+            obs, rewards, terminated, truncated, info = env.step(continuous_action)
 
-                if terminated:
-                    next_state = None
-                else:
-                    next_state = obs["policy"]
+            if terminated:
+                next_state = None
+            else:
+                next_state = obs["policy"]
 
-                # print(f"{state = }, {action = }, {next_state = }, {rewards = }")
-                memory.push(state, action, next_state, rewards)
-                state = next_state
+            memory.push(state, action, next_state, rewards)
+            state = next_state
 
-                if len(memory) >= hyperparameters["batch_size"]:
-                    agent.update(memory.sample(hyperparameters["batch_size"]))
+            if len(memory) >= hyperparameters["batch_size"]:
+                agent.update(memory.sample(hyperparameters["batch_size"]))
+                agent.sync_target_net()
 
-                # logging
-                cumulative_reward += rewards.item()
+            # logging
+            cumulative_reward += rewards.item()
 
-                last_obs = obs["policy"]
+        rewards_list.append(cumulative_reward)
+        cumulative_reward = 0.0
 
-            pbar.update(1)
-            pbar.set_description(
-                ", ".join(
-                    [
-                        f"Episode: {ep}",
-                        # f"Rewards: {rewards_list[-1]:.4f}",
-                        # f"Eval Rewards: {eval_rewards[-1]:.4f}",
-                        # f"Alpha: {alpha:.4f}",
-                        f"Epsilon: {epsilon:.4f}",
-                    ]
-                )
+        pbar.update(1)
+        pbar.set_description(
+            ", ".join(
+                [
+                    f"Episode: {ep}",
+                    f"Rewards: {rewards_list[-1]:.4f}",
+                    # f"Eval Rewards: {eval_rewards[-1]:.4f}",
+                    # f"Alpha: {alpha:.4f}",
+                    f"Epsilon: {epsilon:.4f}",
+                ]
             )
+        )
 
-    print(f"memory size: {len(memory)}")
-    print(f"sample from memory: {memory.sample(1)}")
+    # print(f"memory size: {len(memory)}")
+    # print(f"sample from memory: {memory.sample(1)}")
 
     # close the environment
     env.close()
@@ -161,7 +154,7 @@ def main():
     # plt.tight_layout()
     #
     # fig.savefig("scripts/rl_playground/q_learning/out/q_learning_rewards.png", dpi=300)
-
+    #
     # print(f"max cart vel: {max_cart_vel}, max pole vel: {max_pole_vel}")
 
 

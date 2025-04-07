@@ -3,9 +3,9 @@
 [Pytorch docs](https://github.com/pytorch/tutorials/blob/main/intermediate_source/reinforcement_q_learning.py)
 
 ## TODO
-- [ ] Implement Target Network update
-- [ ] Implement batched update of action value function
-- [ ] Implement action sampling from epsilon-greedy policy
+- [x] Implement Target Network update
+- [x] Implement batched update of action value function
+- [x] Implement action sampling from epsilon-greedy policy
 - [ ] Add epsilon decay
 - [ ] Plot results
 - [ ] Train model
