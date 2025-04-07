@@ -1,3 +1,4 @@
+import torch
 from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
@@ -28,7 +29,22 @@ class DQNAgent(object):
         self.target_value_net = target_value_net
 
     def get_action(self, state: Tensor, epsilon: float):
-        raise NotImplementedError
+        """epsilon greedy action selection"""
+        if torch.rand(1).item() > epsilon:
+            with torch.no_grad():
+                action_idx = self.action_value_net(state).argmax().item()
+        else:
+            action_idx = torch.randint(0, self.action_value_net.layer3.out_features, (1,)).item()
+
+        return self._index_to_action(action_idx)
 
     def update(self, transition_batch: list[Transition]):
         raise NotImplementedError
+
+    def _index_to_action(self, index: int):
+        """Convert index to action"""
+        action_range = (-2, 2)
+        action = (
+            (index / (self.action_value_net.layer3.out_features - 1)) * (action_range[1] - action_range[0])
+        ) + action_range[0]
+        return torch.tensor([[action]], dtype=torch.float32)

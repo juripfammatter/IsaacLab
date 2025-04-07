@@ -64,6 +64,7 @@ def main():
     env = ManagerBasedRLEnv(cfg=env_cfg)
     n_observations = env.observation_manager.group_obs_dim["policy"][0]
     n_actions = env.action_manager.total_action_dim
+    n_action_steps = 7
 
     # print(f"{n_observations = }")
     # print(f"{n_actions = }")
@@ -74,8 +75,8 @@ def main():
     epsilon = epsilon_scheduler.step()
 
     # setup Agent
-    action_value_net = DQN(n_observations, n_actions).to(env.device)
-    target_value_net = DQN(n_observations, n_actions).to(env.device)
+    action_value_net = DQN(n_observations, n_action_steps).to(env.device)
+    target_value_net = DQN(n_observations, n_action_steps).to(env.device)
     target_value_net.load_state_dict(action_value_net.state_dict())
 
     agent = DQNAgent(action_value_net, target_value_net)
@@ -101,7 +102,9 @@ def main():
             state, _ = env.reset()
             state = state["policy"]
             while simulation_app.is_running() and not terminated:
-                action = torch.randn_like(env.action_manager.action)
+                # action = torch.randn_like(env.action_manager.action)
+                action = agent.get_action(state, epsilon)
+                # print(f"action: {agent.get_action(state, epsilon)}")
                 # action = agent.get_action(state, epsilon)
 
                 # step the environment
@@ -131,13 +134,14 @@ def main():
                         f"Episode: {ep}",
                         # f"Rewards: {rewards_list[-1]:.4f}",
                         # f"Eval Rewards: {eval_rewards[-1]:.4f}",
-                        f"Alpha: {alpha:.4f}",
+                        # f"Alpha: {alpha:.4f}",
                         f"Epsilon: {epsilon:.4f}",
                     ]
                 )
             )
 
-    print(f"samples from memory: {memory.sample(1)}")
+    print(f"memory size: {len(memory)}")
+    print(f"sample from memory: {memory.sample(1)}")
 
     # close the environment
     env.close()
