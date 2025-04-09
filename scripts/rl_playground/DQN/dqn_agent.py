@@ -116,3 +116,10 @@ class DQNAgent(object):
     def save(self, path: str) -> None:
         """Save the model to a file."""
         torch.save(self.target_value_net.state_dict(), path)
+
+    def load(self, path: str) -> None:
+        """Load the model from a file."""
+        self.target_value_net.load_state_dict(torch.load(path, weights_only=True))
+        self.target_value_net.eval()
+        self.action_value_net.load_state_dict(self.target_value_net.state_dict())
+        self.action_value_net.eval()

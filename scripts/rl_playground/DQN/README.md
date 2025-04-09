@@ -6,11 +6,12 @@
 - [x] Implement Target Network update
 - [x] Implement batched update of action value function
 - [x] Implement action sampling from epsilon-greedy policy
-- [ ] Add epsilon decay
+- [x] Add epsilon decay
 - [x] Plot results
-- [ ] Train model
+- [x] Train model
 - [ ] Evaluate model performance
 - [ ] Implement checkpointing
+- [x] figure out timing of mdp timeout
 
 
 ### Optional

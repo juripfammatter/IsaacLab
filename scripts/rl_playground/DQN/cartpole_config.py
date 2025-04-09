@@ -110,7 +110,7 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     # (1) Time out
-    time_out = DoneTerm(func=mdp.time_out, time_out=True)
+    time_out = DoneTerm(func=mdp.time_out, time_out=False)  # timeouts are also terminations
     # (2) Cart out of bounds
     cart_out_of_bounds = DoneTerm(
         func=mdp.joint_pos_out_of_manual_limit,
@@ -151,5 +151,4 @@ class CartpoleEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.dt = 0.005  # sim step every 5ms: 200Hz
 
         # RL
-        self.episode_length_s = 5.0  # 5 seconds per episode: TODO: what is this for?
-        self.max_episode_length_s = 10.0
+        self.episode_length_s = 10.0  # 5 seconds per episode:
