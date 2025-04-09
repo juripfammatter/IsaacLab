@@ -1,6 +1,8 @@
 """Launch Isaac Sim Simulator first."""
 
 import argparse
+from datetime import datetime
+import os
 
 from isaaclab.app import AppLauncher
 
@@ -49,13 +51,15 @@ hyperparameters = {
     "learning_rate": 1e-4,
     "target_update": 10,
     "epsilon": 0.1,
-    "n_episodes": 100,
+    "n_episodes": 200,
     "batch_size": 128,
     "memory_capacity": 10_000,
 }
 
 
 def main():
+    torch.manual_seed(402)
+
     """Main function."""
     # parse the arguments
     env_cfg = CartpoleEnvCfg()
@@ -68,7 +72,7 @@ def main():
 
     # TODO
     # exploration scheduler (GLIE policy)
-    epsilon_scheduler = CustomScheduler(hyperparameters["gamma"], gamma=0.9995)
+    epsilon_scheduler = CustomScheduler(hyperparameters["epsilon"], gamma=0.9995)
     epsilon = epsilon_scheduler.step()
 
     agent = DQNAgent(
@@ -84,6 +88,8 @@ def main():
 
     # logging
     rewards_list = []
+    average_rewards = []
+    epsilons = []
     cumulative_reward = 0.0
 
     pbar = tqdm(total=hyperparameters["n_episodes"])
@@ -121,13 +127,18 @@ def main():
 
         rewards_list.append(cumulative_reward)
         cumulative_reward = 0.0
+        epsilons.append(epsilon)
+        epsilon = epsilon_scheduler.step()
 
+        n_avg = min(ep + 1, 100)
+        average_rewards.append(sum(rewards_list[-n_avg:]) / n_avg)
         pbar.update(1)
         pbar.set_description(
             ", ".join(
                 [
                     f"Episode: {ep}",
                     f"Rewards: {rewards_list[-1]:.4f}",
+                    f"Avg. rewards ({n_avg}): {average_rewards[-1]:.4f}",
                     # f"Eval Rewards: {eval_rewards[-1]:.4f}",
                     # f"Alpha: {alpha:.4f}",
                     f"Epsilon: {epsilon:.4f}",
@@ -141,19 +152,22 @@ def main():
     # close the environment
     env.close()
 
-    # fig, axs = plt.subplots(1, 3, figsize=(10, 5))
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
     #
-    # axs[0].scatter(range(len(rewards_list)), rewards_list, s=4, alpha=0.5, label="Rewards")
-    # axs[0].plot(range(0, len(rewards_list), 50), eval_rewards, "x--", color="magenta", alpha=0.5, label="Eval Rewards")
-    # axs[0].set(title="Rewards")
+    axs[0].scatter(range(len(rewards_list)), rewards_list, s=4, alpha=0.5, label="Rewards")
+    axs[0].plot(range(len(rewards_list)), average_rewards, "x--", color="magenta", alpha=0.5, label="Eval Rewards")
+    axs[0].set(title="Rewards")
     # axs[1].plot(alphas)
     # axs[1].set(title="$\\alpha$")
-    # axs[2].plot(epsilons)
-    # axs[2].set(title="$\\epsilon$")
+    axs[1].plot(epsilons)
+    axs[1].set(title="$\\epsilon$")
     #
-    # plt.tight_layout()
+    plt.tight_layout()
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    out_path = os.path.join(os.getcwd(), "scripts", "rl_playground", "DQN", "out", timestamp)
+    os.makedirs(out_path, exist_ok=True)
     #
-    # fig.savefig("scripts/rl_playground/q_learning/out/q_learning_rewards.png", dpi=300)
+    fig.savefig(os.path.join(out_path, "q_learning_rewards.png"), dpi=300)
     #
     # print(f"max cart vel: {max_cart_vel}, max pole vel: {max_pole_vel}")
 

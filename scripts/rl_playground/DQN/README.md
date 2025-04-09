@@ -7,7 +7,7 @@
 - [x] Implement batched update of action value function
 - [x] Implement action sampling from epsilon-greedy policy
 - [ ] Add epsilon decay
-- [ ] Plot results
+- [x] Plot results
 - [ ] Train model
 - [ ] Evaluate model performance
 
