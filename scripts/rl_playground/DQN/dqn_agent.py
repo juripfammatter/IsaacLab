@@ -112,3 +112,7 @@ class DQNAgent(object):
             (index / (self.action_value_net.layer3.out_features - 1)) * (action_range[1] - action_range[0])
         ) + action_range[0]
         return action
+
+    def save(self, path: str) -> None:
+        """Save the model to a file."""
+        torch.save(self.target_value_net.state_dict(), path)

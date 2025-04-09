@@ -51,7 +51,7 @@ hyperparameters = {
     "learning_rate": 1e-4,
     "target_update": 10,
     "epsilon": 0.1,
-    "n_episodes": 200,
+    "n_episodes": 5_000,
     "batch_size": 128,
     "memory_capacity": 10_000,
 }
@@ -168,6 +168,7 @@ def main():
     os.makedirs(out_path, exist_ok=True)
     #
     fig.savefig(os.path.join(out_path, "q_learning_rewards.png"), dpi=300)
+    agent.save(os.path.join(out_path, "target_net.pt"))
     #
     # print(f"max cart vel: {max_cart_vel}, max pole vel: {max_pole_vel}")
 

@@ -10,6 +10,7 @@
 - [x] Plot results
 - [ ] Train model
 - [ ] Evaluate model performance
+- [ ] Implement checkpointing
 
 
 ### Optional

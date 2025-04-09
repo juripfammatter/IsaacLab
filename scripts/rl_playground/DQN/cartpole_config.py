@@ -151,4 +151,5 @@ class CartpoleEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.dt = 0.005  # sim step every 5ms: 200Hz
 
         # RL
-        self.episode_length_s = 5.0  # 5 seconds per episode
+        self.episode_length_s = 5.0  # 5 seconds per episode: TODO: what is this for?
+        self.max_episode_length_s = 10.0
