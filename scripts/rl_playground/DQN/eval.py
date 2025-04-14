@@ -46,7 +46,8 @@ hyperparameters = {
     "memory_capacity": 10_000,
 }
 
-timestamp = "2025-04-09_21-53-35"
+timestamp = "2025-04-14_21-29-26"
+checkpoint_interval = 1800
 
 
 def main():
@@ -70,7 +71,11 @@ def main():
         device=env.device,
     )
 
-    agent.load(os.path.join(os.getcwd(), "scripts", "rl_playground", "DQN", "out", timestamp, "target_net.pt"))
+    agent.load(
+        os.path.join(
+            os.getcwd(), "scripts", "rl_playground", "DQN", "out", timestamp, f"target_net_{checkpoint_interval}.pt"
+        )
+    )
 
     # logging
     rewards_list = []
