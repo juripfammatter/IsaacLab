@@ -22,10 +22,9 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import torch
-import torch.optim as optim
 from tqdm import tqdm
 from cartpole_config import CartpoleEnvCfg
-from dqn_agent import DQNAgent, DQN
+from dqn_agent import DQNAgent
 from utils import ReplayMemory
 
 
@@ -54,13 +53,18 @@ hyperparameters = {
     "learning_rate": 1e-4,
     "target_update": 10,
     "epsilon": 0.1,
-    "n_episodes": 1750,
+    "n_episodes": 3_000,
     "batch_size": 128,
     "memory_capacity": 10_000,
+    "checkpoint_interval": 200,
 }
 
 
 def main():
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    out_path = os.path.join(os.getcwd(), "scripts", "rl_playground", "DQN", "out", timestamp)
+    os.makedirs(out_path, exist_ok=True)
+
     torch.manual_seed(402)
 
     """Main function."""
@@ -73,7 +77,6 @@ def main():
     n_actions = env.action_manager.total_action_dim
     n_action_steps = 7
 
-    # TODO
     # exploration scheduler (GLIE policy)
     epsilon_scheduler = CustomScheduler(hyperparameters["epsilon"], gamma=0.9995)
     epsilon = epsilon_scheduler.step()
@@ -108,22 +111,13 @@ def main():
         axs[0].scatter(range(len(rewards_list)), rewards_list, s=4, alpha=0.5, label="Rewards")
         axs[0].plot(range(len(rewards_list)), average_rewards, "x--", color="magenta", alpha=0.5, label="Eval Rewards")
         axs[0].set(title="Rewards")
-        # axs[1].plot(alphas)
-        # axs[1].set(title="$\\alpha$")
         axs[1].plot(epsilons)
         axs[1].set(title="$\\epsilon$")
 
         plt.tight_layout()
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        out_path = os.path.join(os.getcwd(), "scripts", "rl_playground", "DQN", "out", timestamp)
-        os.makedirs(out_path, exist_ok=True)
         plt.savefig(os.path.join(out_path, "rewards.png"))
 
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        out_path = os.path.join(os.getcwd(), "scripts", "rl_playground", "DQN", "out", timestamp)
-        os.makedirs(out_path, exist_ok=True)
-
-        agent.save(os.path.join(out_path, "target_net.pt"))
+        agent.save(os.path.join(out_path, "target_net_final.pt"))
         sys.exit(0)
 
     atexit.register(cleanup)
@@ -173,16 +167,16 @@ def main():
                     f"Episode: {ep}",
                     f"Rewards: {rewards_list[-1]:.4f}",
                     f"Avg. rewards ({n_avg}): {average_rewards[-1]:.4f}",
-                    # f"Eval Rewards: {eval_rewards[-1]:.4f}",
-                    # f"Alpha: {alpha:.4f}",
                     f"Epsilon: {epsilon:.4f}",
                 ]
             )
         )
 
+        if ep % hyperparameters["checkpoint_interval"] == 0:
+
+            agent.save(os.path.join(out_path, f"target_net_{ep}.pt"))
+
     cleanup(None)
-    # print(f"memory size: {len(memory)}")
-    # print(f"sample from memory: {memory.sample(1)}")
 
 
 if __name__ == "__main__":

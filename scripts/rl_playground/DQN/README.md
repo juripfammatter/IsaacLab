@@ -9,8 +9,8 @@
 - [x] Add epsilon decay
 - [x] Plot results
 - [x] Train model
-- [ ] Evaluate model performance
-- [ ] Implement checkpointing
+- [x] Evaluate model performance
+- [x] Implement checkpointing
 - [x] figure out timing of mdp timeout
 
 
