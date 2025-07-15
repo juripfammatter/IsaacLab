@@ -60,4 +60,4 @@ _build
 
 # Pre-Trained Checkpoints
 /.pretrained_checkpoints/
-/scripts/rl_playground/q_learning/out/
+out/
