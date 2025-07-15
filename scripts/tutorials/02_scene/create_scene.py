@@ -51,15 +51,16 @@ from isaaclab_assets import CARTPOLE_CFG  # isort:skip
 class CartpoleSceneCfg(InteractiveSceneCfg):
     """Configuration for a cart-pole scene."""
 
-    # ground plane
+    # ground plane (non-interactive)
     ground = AssetBaseCfg(prim_path="/World/defaultGroundPlane", spawn=sim_utils.GroundPlaneCfg())
 
-    # lights
+    # lights (non-interactive)
     dome_light = AssetBaseCfg(
         prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
     )
 
-    # articulation
+    # articulation (interactive)
+    # {ENV_REGEX_NS} becomes /World/envs/env_{i}
     cartpole: ArticulationCfg = CARTPOLE_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
 

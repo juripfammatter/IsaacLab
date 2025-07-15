@@ -113,7 +113,7 @@ class CartpoleEnvCfg(ManagerBasedEnvCfg):
     """Configuration for the cartpole environment."""
 
     # Scene settings
-    scene = CartpoleSceneCfg(num_envs=1024, env_spacing=2.5)
+    scene = CartpoleSceneCfg(num_envs=args_cli.num_envs, env_spacing=2.5)
     # Basic settings
     observations = ObservationsCfg()
     actions = ActionsCfg()
@@ -152,9 +152,11 @@ def main():
             joint_efforts = torch.randn_like(env.action_manager.action)
             # step the environment
             obs, _ = env.step(joint_efforts)
-            # print current orientation of pole
-            print("[Env 0]: Pole joint: ", obs["policy"][0][1].item())
-            # update counter
+            if count % 100 == 0:
+                # print current orientation of pole
+                print("Shape of observation:", {obs["policy"].shape})
+                print("[Env 0]: Pole joint: ", obs["policy"][0][1].item())
+                # update counter
             count += 1
 
     # close the environment

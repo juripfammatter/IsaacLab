@@ -71,7 +71,7 @@ def main():
     with open(os.path.join(log_dir_path, "log.txt"), "w") as log_file:
         # Simulate physics
         while simulation_app.is_running():
-            log_file.write(f"{sim_time}" + "\n")
+            log_file.write(f"{sim_time:.3f}" + "\n")
             # perform step
             sim.step()
             sim_time += sim_dt
